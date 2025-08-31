@@ -1,0 +1,46 @@
+name: 自动更新依赖
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # 每周日UTC 0点运行一次
+  workflow_dispatch:     # 可以手动触发
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装 uv
+        run: |
+          pip install uv
+
+      - name: 安装依赖并同步
+        run: |
+          uv sync
+
+      - name: 检查是否有依赖变化
+        id: git-check
+        run: |
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git diff --exit-code uv.lock || echo "changed" > changed.txt
+
+      - name: 创建 PR（如果有变化）
+        if: success() && steps.git-check.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: 自动更新依赖并同步 uv.lock"
+          title: "自动依赖升级"
+          body: |
+            由 GitHub Actions 自动运行。
+            - 自动同步 pyproject.toml 和 uv.lock
+          branch: "auto/update-dependencies"
+          delete-branch: true
