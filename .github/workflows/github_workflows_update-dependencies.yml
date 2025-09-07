@@ -1,41 +1,46 @@
-name: Update UV Dependencies
+name: Update Dependencies
+
 on:
   schedule:
-    - cron: '0 0 * * 0'  # Run weekly on Sunday at midnight
-  workflow_dispatch:  # Allow manual triggering as well
+    - cron: '0 0 * * 0'  # 每周日午夜运行
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
   update-dependencies:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      
+          
       - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          export PATH="$HOME/.cargo/bin:$PATH"
-      
-      - name: Update dependencies
+          
+      - name: Update requirements.txt
         run: |
           if [ -f requirements.txt ]; then
-            uv pip compile requirements.txt --upgrade -o requirements.txt
+            uv pip compile requirements.txt -o requirements.txt.new --upgrade
+            mv requirements.txt.new requirements.txt
           fi
+          
+      - name: Install dependencies from pyproject.toml
+        run: |
           if [ -f pyproject.toml ]; then
-            uv pip sync pyproject.toml --upgrade
+            uv pip sync pyproject.toml
           fi
-      
+          
       - name: Commit and push if changed
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "GitHub Actions"
-          git add -A
-          git diff --quiet && git diff --staged --quiet || git commit -m "Auto-update dependencies via uv"
+          git config --local user.name "github-actions[bot]"
+          git add requirements.txt
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: update dependencies"
           git push
