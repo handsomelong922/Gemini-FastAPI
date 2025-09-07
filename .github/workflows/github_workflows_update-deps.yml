@@ -3,7 +3,7 @@ name: Automated Dependency Update
 on:
   schedule:
     - cron: '0 0 * * 0'    # every Sunday at 00:00 UTC
-  workflow_dispatch:      # allow manual runs
+  workflow_dispatch:      # manual trigger
 
 jobs:
   update-dependencies:
@@ -13,8 +13,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # fetch full history so we can detect changes
-          fetch-depth: 0
+          fetch-depth: 0   # fetch full history so diffs work
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -27,19 +26,17 @@ jobs:
       - name: Sync dependencies
         run: uv sync
 
-      - name: Detect changes
-        id: detect_changes
-        run: |
-          # exit-code 0 if no changes; non-zero if diff exists
-          git diff --exit-code pyproject.toml uv.lock || echo "::set-output name=changed::true"
-
-      - name: Create Pull Request
-        if: steps.detect_changes.outputs.changed == 'true'
+      - name: Create Pull Request if changes
         uses: peter-evans/create-pull-request@v6
         with:
+          # Use the automatic GITHUB_TOKEN provided by GitHub Actions
+          token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: chore: automated dependency update
-          title: chore: Automated Dependency Update
+          branch: auto/deps-update-${{ github.run_number }}
+          title: chore: automated dependency update
           body: |
-            This PR was created automatically by GitHub Actions to update the project dependencies.
-          branch: auto/update-deps
+            This pull request was generated automatically by GitHub Actions.
+            - Ran `uv sync`
+            - Committed updated `uv.lock` (and `pyproject.toml` if modified)
+          labels: automated, dependencies
           delete-branch: true
