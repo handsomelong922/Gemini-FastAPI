@@ -1,42 +1,51 @@
-name: Automated Dependency Update
+name: 自动更新依赖
 
 on:
   schedule:
-    - cron: '0 0 * * 0'    # every Sunday at 00:00 UTC
-  workflow_dispatch:      # manual trigger
+    - cron: '0 0 * * 0'    # 每周日 UTC 零点运行
+  workflow_dispatch:      # 允许手动触发
 
 jobs:
   update-dependencies:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: 检出仓库
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # fetch full history so diffs work
+          fetch-depth: 0    # 获取完整历史以便 diff
 
-      - name: Setup Python
+      - name: 设置 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install uv
+      - name: 安装 uv
         run: pip install uv
 
-      - name: Sync dependencies
+      - name: 同步依赖
         run: uv sync
 
-      - name: Create Pull Request if changes
+      - name: 检测变更
+        id: detect_changes
+        run: |
+          # 如果 pyproject.toml 或 uv.lock 有 diff，就输出 changed=true
+          if git diff --quiet pyproject.toml uv.lock; then
+            echo "No changes detected"
+          else
+            echo "Changes detected"
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 创建 PR（仅在有变更时）
+        if: steps.detect_changes.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
-          # Use the automatic GITHUB_TOKEN provided by GitHub Actions
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: chore: automated dependency update
-          branch: auto/deps-update-${{ github.run_number }}
-          title: chore: automated dependency update
+          commit-message: chore: 自动更新依赖并同步 uv.lock
+          branch: auto/update-deps-${{ github.run_number }}
+          title: chore: 自动依赖升级
           body: |
-            This pull request was generated automatically by GitHub Actions.
-            - Ran `uv sync`
-            - Committed updated `uv.lock` (and `pyproject.toml` if modified)
-          labels: automated, dependencies
+            此 PR 由 GitHub Actions 自动生成：
+            - 运行 `uv sync`
+            - 自动提交更新后的 pyproject.toml 和 uv.lock
           delete-branch: true
